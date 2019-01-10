@@ -1,6 +1,7 @@
 import random
 import weakref
 
+import syft
 from syft.frameworks.torch.tensors import AbstractTensor
 from syft.frameworks.torch.tensors import PointerTensor
 from syft.workers import BaseWorker
@@ -21,16 +22,39 @@ class TorchTensor(AbstractTensor):
     """
 
     def __str__(self) -> str:
-        if hasattr(self, "child") and isinstance(self.child, PointerTensor):
-            return type(self).__name__ + self.child.__str__()
+        if hasattr(self, "child"):
+            return type(self).__name__ + ">" + self.child.__str__()
         else:
             return self.native___str__()
 
     def __repr__(self) -> str:
-        if hasattr(self, "child") and isinstance(self.child, PointerTensor):
-            return type(self).__name__ + self.child.__repr__()
+        if hasattr(self, "child"):
+            return type(self).__name__ + ">" + self.child.__repr__()
         else:
             return self.native___repr__()
+
+    @classmethod
+    def handle_method_command(cls, command):
+        cmd, self, args = command  # TODO: add kwargs
+
+        new_self, new_args = syft.frameworks.torch.hook_args.hook_method_args(
+            cmd, self, args
+        )  # TODO add new_kwargs, kwargs
+        if type(new_self).__name__ == "Tensor":  # means that new_self == self -> not a wrapper
+            cmd = getattr(new_self, f"native_{cmd}")
+            # Run the native function with the new args
+            if isinstance(new_args, tuple):
+                response = cmd(*new_args)
+            else:
+                response = cmd(new_args)
+        else:  # means the wrapper has been removed
+            new_command = (cmd, new_self, new_args)
+            response = type(new_self).handle_method_command(new_command)
+            response, _ = syft.frameworks.torch.hook_args.hook_method_response(
+                cmd, (response, 1), wrap_type=cls
+            )
+
+        return response
 
     def send(self, location):
         """Gets the pointer to a new remote object.

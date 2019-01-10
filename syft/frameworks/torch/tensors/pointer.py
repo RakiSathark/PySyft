@@ -1,3 +1,4 @@
+import syft
 from syft.frameworks.torch.tensors.abstract import AbstractTensor
 from syft.codes import MSGTYPE
 
@@ -72,6 +73,23 @@ class PointerTensor(AbstractTensor):
         self.owner = owner
         self.id = id
         self.garbage_collect_data = garbage_collect_data
+
+    @classmethod
+    def handle_method_command(cls, command):
+        cmd, self, args = command  # TODO: add kwargs
+
+        pointer = self
+        # Get info where to send the command
+        owner = pointer.owner
+        location = pointer.location
+
+        # Send the command
+        response = owner.send_command(location, command)
+
+        response, _ = syft.frameworks.torch.hook_args.hook_method_response(
+            cmd, (response, 1), wrap_type=cls
+        )
+        return response
 
     def __str__(self):
         """Returns a string version of this pointer.
